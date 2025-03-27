@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koordinat Ekle</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Leaflet Harita Kütüphanesi -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+    <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Koordinat Ekle</h2>
+        
+        <p class="text-gray-600 mb-2"><b>Satıcı ID:</b> {{ seller_id }}</p>
+
+        <!-- Harita Alanı -->
+        <div id="map" class="w-full h-64 bg-gray-300 rounded-md"></div>
+
+        <!-- Açıklama Alanı -->
+        <div class="mt-4">
+            <label class="block text-sm text-gray-600">Açıklama</label>
+            <input type="text" id="description" class="w-full p-2 border rounded-md" placeholder="Opsiyonel">
+        </div>
+
+        <!-- Konum Seçim Butonları -->
+        <div class="mt-4 flex justify-between">
+            <button id="getLocationBtn" class="w-1/2 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700">
+                Konumu Al
+            </button>
+            <button id="mapLocationBtn" class="w-1/2 bg-green-600 text-white py-2 rounded-md hover:bg-green-700">
+                Haritadan Seç
+            </button>
+        </div>
+
+        <!-- Konum Gösterimi -->
+        <div class="mt-4">
+            <p><strong>Enlem:</strong> <span id="latitude">-</span></p>
+            <p><strong>Boylam:</strong> <span id="longitude">-</span></p>
+            <p id="errorMessage" class="text-red-500 text-sm hidden">Konum bilgisi alınamadı. Lütfen manuel olarak seçiniz.</p>
+        </div>
+
+        <!-- Koordinat Kaydet Butonu -->
+        <div class="mt-4">
+            <form id="koordinatForm">
+                <input type="hidden" name="satici_id" value="{{ seller_id }}">
+                <input type="hidden" name="enlem" id="enlem">
+                <input type="hidden" name="boylam" id="boylam">
+                <input type="hidden" name="aciklama" id="aciklama">
+                <button type="submit" class="w-full bg-yellow-600 text-white py-2 rounded-md hover:bg-yellow-700">
+                    Koordinat Kaydet
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let map = L.map('map').setView([39.9208, 32.8541], 6); // Başlangıç konumu Türkiye
+        
+        // OpenStreetMap Harita Katmanı
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap Katkıda Bulunanlar'
+        }).addTo(map);
+        
+        let marker;
+
+        // Konum Al Butonu (Otomatik Konum)
+        document.getElementById('getLocationBtn').addEventListener('click', function() {
+            navigator.geolocation.getCurrentPosition(position => {
+                let lat = position.coords.latitude;
+                let lon = position.coords.longitude;
+
+                // Haritayı konuma götür
+                map.setView([lat, lon], 15);
+
+                // Önceki marker varsa kaldır
+                if (marker) {
+                    map.removeLayer(marker);
+                }
+
+                // Yeni marker ekle
+                marker = L.marker([lat, lon]).addTo(map)
+                    .bindPopup("Buradasınız!").openPopup();
+
+                // Koordinatları ekranda göster
+                document.getElementById('latitude').textContent = lat;
+                document.getElementById('longitude').textContent = lon;
+
+                // Formdaki gizli alanları güncelle
+                document.getElementById('enlem').value = lat;
+                document.getElementById('boylam').value = lon;
+
+                // Hata mesajını gizle
+                document.getElementById('errorMessage').classList.add("hidden");
+
+                console.log("Enlem:", lat, "Boylam:", lon);
+            }, error => {
+                console.error("Konum alınamadı!", error);
+                document.getElementById('errorMessage').classList.remove("hidden");
+            });
+        });
+
+        // Haritadan Konum Seçme Butonu
+        document.getElementById('mapLocationBtn').addEventListener('click', function() {
+            // Harita üzerinde tıklama ile konum seçme
+            map.on('click', function(e) {
+                let lat = e.latlng.lat;
+                let lon = e.latlng.lng;
+
+                // Eğer daha önce bir marker varsa, sil
+                if (marker) {
+                    map.removeLayer(marker);
+                }
+
+                // Yeni marker ekle
+                marker = L.marker([lat, lon]).addTo(map)
+                    .bindPopup("Seçilen Konum").openPopup();
+
+                // Koordinatları ekranda göster
+                document.getElementById('latitude').textContent = lat;
+                document.getElementById('longitude').textContent = lon;
+
+                // Formdaki gizli alanları güncelle
+                document.getElementById('enlem').value = lat;
+                document.getElementById('boylam').value = lon;
+
+                // Hata mesajını gizle
+                document.getElementById('errorMessage').classList.add("hidden");
+
+                console.log("Enlem:", lat, "Boylam:", lon);
+            });
+        });
+
+        // Form Submit Olayı
+        document.getElementById('koordinatForm').addEventListener('submit', function(event) {
+            event.preventDefault(); // Sayfanın yenilenmesini engelle
+    
+            let satici_id = document.querySelector('input[name="satici_id"]').value;
+            let enlem = document.getElementById('enlem').value;
+            let boylam = document.getElementById('boylam').value;
+            let aciklama = document.getElementById('description').value;
+    
+            if (!enlem || !boylam) {
+                alert("Lütfen önce bir konum seçin.");
+                return;
+            }
+    
+            fetch('/ekle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ satici_id, enlem, boylam, aciklama })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.mesaj);
+                if (data.redirect) {
+                    window.location.href = data.redirect; // Yönlendirme eklendi
+                } else {
+                    window.location.reload();
+                }
+            })
+            .catch(error => console.error('Hata:', error));
+        });
+    </script>
+</body>
+</html>
